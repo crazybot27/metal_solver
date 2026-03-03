@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 good_lp = { version = "1", default-features = false, features = ["minilp"] }
+macroquad = "0.4.14"
