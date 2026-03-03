@@ -1,11 +1,14 @@
-#![allow(dead_code)]
-
+use std::fmt::Debug;
 use std::io::{self, Write};
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
+
+use good_lp::{
+    constraint, default_solver, variable, variables, Expression, Solution, SolverModel, Variable,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-enum Metal {
+pub enum Metal {
     Quicksilver = 0,
     Lead = 1,
     Tin = 2,
@@ -17,11 +20,11 @@ enum Metal {
 impl Metal {
     const COUNT: usize = 7;
 
-    const fn idx(self) -> usize {
+    pub const fn idx(self) -> usize {
         self as usize
     }
 
-    const fn from(idx: usize) -> Self {
+    pub const fn from(idx: usize) -> Self {
         match idx {
             0 => Metal::Quicksilver,
             1 => Metal::Lead,
@@ -34,7 +37,7 @@ impl Metal {
         }
     }
 
-    fn all() -> [Self; Self::COUNT] {
+    pub const fn all() -> [Self; Self::COUNT] {
         [
             Metal::Quicksilver,
             Metal::Lead,
@@ -46,7 +49,7 @@ impl Metal {
         ]
     }
 
-    fn normals() -> [Self; Self::COUNT - 1] {
+    pub const fn normals() -> [Self; Self::COUNT - 1] {
         [
             Metal::Lead,
             Metal::Tin,
@@ -57,7 +60,7 @@ impl Metal {
         ]
     }
 
-    fn next(self) -> Option<Self> {
+    pub const fn next(self) -> Option<Self> {
         match self {
             Metal::Lead => Some(Metal::Tin),
             Metal::Tin => Some(Metal::Iron),
@@ -67,7 +70,7 @@ impl Metal {
             Metal::Gold | Metal::Quicksilver => None,
         }
     }
-    fn prev(self) -> Option<Self> {
+    pub const fn prev(self) -> Option<Self> {
         match self {
             Metal::Tin => Some(Metal::Lead),
             Metal::Iron => Some(Metal::Tin),
@@ -77,7 +80,7 @@ impl Metal {
             Metal::Quicksilver | Metal::Lead => None,
         }
     }
-    fn get_split_metals(self) -> Option<(Self, Self)> {
+    pub const fn get_split_metals(self) -> Option<(Self, Self)> {
         match self {
             Metal::Lead => None,
             Metal::Tin => Some((Metal::Lead, Metal::Lead)),
@@ -91,13 +94,7 @@ impl Metal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct MetalTransitionKey {
-    target: Metal,
-    transition_type: Transition,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Transition {
+pub enum Transition {
     Projection, // Uses one QS to raise a metal to the next level
     Rejection, // Lowers a metal and yields a QS
     Purification, // Turns two metals into one of the next level
@@ -105,7 +102,7 @@ enum Transition {
 }
 
 #[derive(Clone, Copy)]
-struct AvailableTransitions {
+pub struct AvailableTransitions {
     projection: bool,
     rejection: bool,
     purification: bool,
@@ -136,7 +133,7 @@ impl std::fmt::Debug for AvailableTransitions {
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
-struct SolveState {
+pub struct SolveState {
     metals: [f64; Metal::COUNT],
 }
 
@@ -151,7 +148,7 @@ impl std::fmt::Debug for SolveState {
 }
 
 impl SolveState {
-    fn from_input(input: &str) -> Result<Self, String> {
+    pub fn from_input(input: &str) -> Result<Self, String> {
         let parts: Vec<&str> = input.split_whitespace().collect();
         if parts.len() != Metal::COUNT {
             return Err(format!("Expected {} values for metals, got {}", Metal::COUNT, parts.len()));
@@ -163,7 +160,7 @@ impl SolveState {
         Ok(SolveState { metals })
     }
 
-    fn get(&self, metal: Metal) -> f64 {
+    pub fn get(&self, metal: Metal) -> f64 {
         self.metals[metal.idx()]
     }
 
@@ -255,133 +252,226 @@ impl SolveState {
         desired_metals.is_subset(reachable_metals)
     }
 
-    fn can_theoretically_reach(&self, target: &SolveState, transitions: &AvailableTransitions) -> bool {
+    pub fn can_theoretically_reach(&self, target: &SolveState, transitions: &AvailableTransitions) -> bool {
         let reachable_metals = self.theoretically_reachable_metals(transitions);
         Self::target_within_reachable_metals(&reachable_metals, target)
     }
 }
 
-struct Solver {
-    initial_state: SolveState,
-    target_state: SolveState,
-    available_transitions: AvailableTransitions,
-    metal_transition_potencies: HashMap<MetalTransitionKey, f64>,
+struct OptimalSolution {
+    ratio: f64,
+    outputs: [f64; Metal::COUNT],
+    projection: [f64; 5],
+    rejection: [f64; 5],
+    purification: [f64; 5],
+    deposition: [f64; 5],
 }
 
-impl Solver {
-    fn new(initial_state: SolveState, target_state: SolveState, available_transitions: AvailableTransitions) -> Self {
-        let mut metal_transition_potencies = HashMap::new();
-        for &metal in Metal::normals().iter().skip(1) {
-            if available_transitions.projection {
-                metal_transition_potencies.insert(MetalTransitionKey {
-                    target: metal,
-                    transition_type: Transition::Projection,
-                }, 0.0);
-            }
-            if available_transitions.rejection {
-                metal_transition_potencies.insert(MetalTransitionKey {
-                    target: metal,
-                    transition_type: Transition::Rejection,
-                }, 0.0);
-            }
-            if available_transitions.purification {
-                metal_transition_potencies.insert(MetalTransitionKey {
-                    target: metal,
-                    transition_type: Transition::Purification,
-                }, 0.0);
-            }
-            if available_transitions.deposition {
-                metal_transition_potencies.insert(MetalTransitionKey {
-                    target: metal,
-                    transition_type: Transition::Deposition,
-                }, 0.0);
-            }
+fn format_rounded(value: f64, digits: usize) -> String {
+    if (value * 10.0).round() == (value * 10.0) {
+        format!("{:.1}", value)
+    } else {
+        format!("{:.1$}", value, digits)
+    }
+}
+
+fn decimal_to_fraction(value: f64) -> String {
+    let tolerance = 1e-6;
+    let mut numerator = 1;
+    let mut denominator = 1;
+
+    while (numerator as f64 / denominator as f64 - value).abs() > tolerance {
+        if numerator > 1000 || denominator > 1000 {
+            return format!("{:.5}", value);
         }
-        Solver {
-            initial_state,
-            target_state,
-            available_transitions,
-            metal_transition_potencies,
+        if (numerator as f64) / (denominator as f64) < value {
+            numerator += 1;
+        } else {
+            denominator += 1;
         }
     }
 
-    fn get_transition_potency(&self, target: Metal, transition_type: Transition) -> f64 {
-        let key = MetalTransitionKey { target, transition_type };
-        *self.metal_transition_potencies.get(&key).unwrap_or_else(|| panic!("Transition not found for target {:?} and type {:?}", target, transition_type))
-    }
+    format!("{}/{}", numerator, denominator)
+}
 
-    pub fn get_available_keys(&self) -> Vec<MetalTransitionKey> {
-        self.metal_transition_potencies.keys().cloned().collect()
-    }
-
-    pub fn set_transition_potency(&mut self, target: Metal, transition_type: Transition, potency: f64) {
-        if potency < 0.0 {
-            panic!("Potency cannot be negative");
-        }
-        let key = MetalTransitionKey { target, transition_type };
-        if let Some(value) = self.metal_transition_potencies.get_mut(&key) {
-            *value = potency;
-            return;
-        }
-        panic!("Transition not found for target {:?} and type {:?}", target, transition_type);
-    }
-
-    fn calculate_metal_values(&self) -> SolveState {
-        let mut metal_values = self.initial_state;
-        for (&key, &potency) in self.metal_transition_potencies.iter() {
-            let target = key.target;
-            let target_index = target.idx();
-            
-            match key.transition_type {
-                Transition::Projection => {
-                    metal_values.metals[target_index] += metal_values.get(target) * potency;
-                    metal_values.metals[Metal::Quicksilver.idx()] -= metal_values.get(target) * potency;
-                    metal_values.metals[target.prev().expect("Cannot project to get quicksilver or lead").idx()] -= metal_values.get(target) * potency;
-                }
-                Transition::Rejection => {
-                    metal_values.metals[target_index] -= metal_values.get(target) * potency;
-                    metal_values.metals[Metal::Quicksilver.idx()] += metal_values.get(target) * potency;
-                    metal_values.metals[target.prev().expect("Cannot reject quicksilver or lead").idx()] += metal_values.get(target) * potency;
-                }
-                Transition::Purification => {
-                    metal_values.metals[target_index] += metal_values.get(target) * potency;
-                    metal_values.metals[target.prev().expect("Cannot purify to get quicksilver or lead").idx()] -= metal_values.get(target) * potency * 2.0;
-                }
-                Transition::Deposition => {
-                    let (metal1, metal2) = target.get_split_metals().expect("Cannot deposit quicksilver or lead");
-                    metal_values.metals[target_index] -= metal_values.get(target) * potency;
-                    metal_values.metals[metal1.idx()] += metal_values.get(target) * potency;
-                    metal_values.metals[metal2.idx()] += metal_values.get(target) * potency;
-                }
-            }
-        }
-        metal_values
-    }
-
-    pub fn calculate_score(&self) -> f64 {
-        let calculated_values = self.calculate_metal_values();
-        let mut output = f64::INFINITY;
+impl Debug for OptimalSolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut outputs_string = "".to_string();
+        outputs_string += &format!("Ratio: {}\n", format_rounded(self.ratio, 8));
+        outputs_string += "Outputs:\n";
         for metal in Metal::all() {
-            let self_count = calculated_values.get(metal);
-            if self_count < 0.0 {
-                return f64::NEG_INFINITY; // do not allow negative metals
-            }
-            let target_count = self.target_state.get(metal);
-            if target_count > 0.0 {
-                output = output.min(self_count / target_count);
+            let idx = metal.idx();
+            outputs_string += &format!(
+                "- {:?}: {}\n",
+                metal,
+                format_rounded(self.outputs[idx], 5),
+            );
+        }
+        let mut potencies_string = "Transition potencies:\n".to_string();
+
+        for (transition_type, transition_values, metals_index_offset) in [
+            ("Projection", &self.projection, 1),
+            ("Rejection", &self.rejection, 2),
+            ("Purification", &self.purification, 1),
+            ("Deposition", &self.deposition, 2),
+        ] {
+            if transition_values.iter().all(|&x| x == 0.0) {
+                potencies_string += &format!("- {}: N/A\n", transition_type);
+            } else {
+                potencies_string += &format!("- {} on:\n", transition_type);
+                for (index, value) in transition_values.iter().enumerate() {
+                    if *value == 0.0 {continue;}
+                    potencies_string += &format!("  - {:?}: {} ({})\n", Metal::from(index + metals_index_offset), decimal_to_fraction(*value), format_rounded(*value, 5));
+                }
             }
         }
-        output
+        write!(f, "{}{}", outputs_string, potencies_string)
     }
 }
 
+pub fn solve_lp(
+    initial: &SolveState,
+    target: &SolveState,
+    transitions: &AvailableTransitions
+) -> Result<OptimalSolution, String> {
+    let mut vars = variables!();
+    let projection: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
+    let rejection: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
+    let purification: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
+    let deposition: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
+    let ratio = vars.add(variable().min(0.0));
+
+    let i = initial.metals;
+    let p = projection;
+    let r = rejection;
+    let pu = purification;
+    let d = deposition;
+
+    /*
+                    O1 = I1          - P2   + R2                  - 2.0 * Pu2          + 2.0 * D2   + D3       
+                    O2 = I2   + P2   - P3   + R3   - R2   + Pu2   - 2.0 * Pu3   + D3   + 2.0 * D4   + D5   - D2
+                    O3 = I3   + P3   - P4   + R4   - R3   + Pu3   - 2.0 * Pu4   + D5   + 2.0 * D6          - D3
+                    O4 = I4   + P4   - P5   + R5   - R4   + Pu4   - 2.0 * Pu5                              - D4
+                    O5 = I5   + P5   - P6   + R6   - R5   + Pu5   - 2.0 * Pu6                              - D5
+                    O6 = I6   + P6                 - R6   + Pu6                                            - D6
+    */
+    let projection_terms: [Expression; 6] = [
+             - p[0],
+        p[0] - p[1],
+        p[1] - p[2],
+        p[2] - p[3],
+        p[3] - p[4],
+        p[4].into(),
+
+    ];
+    let rejection_terms: [Expression; 6] = [
+        r[0].into(),
+        r[1] - r[0],
+        r[2] - r[1],
+        r[3] - r[2],
+        r[4] - r[3],
+             - r[4],
+    ];
+    let purification_terms: [Expression; 6] = [
+              - 2.0 * pu[0],
+        pu[0] - 2.0 * pu[1],
+        pu[1] - 2.0 * pu[2],
+        pu[2] - 2.0 * pu[3],
+        pu[3] - 2.0 * pu[4],
+        pu[4].into(),
+    ];
+    let deposition_terms: [Expression; 6] = [
+                        (2.0*d[0]) + d[1],
+        - d[0] + d[1] + (2.0*d[2]) + d[3],
+        - d[1] + d[3] + (2.0*d[4]),
+        - d[2],
+        - d[3],
+        - d[4],
+    ];
+
+    let o0: Expression = i[0]
+        + r.into_iter().fold(0.0.into(), |acc: Expression, x| acc + x)
+        - p.into_iter().fold(0.0.into(), |acc: Expression, x| acc + x);
+
+    let mut output_expressions = vec![o0];
+    for idx in 0..6 {
+        let output = i[idx + 1] 
+            + projection_terms[idx].clone() 
+            + rejection_terms[idx].clone() 
+            + purification_terms[idx].clone() 
+            + deposition_terms[idx].clone();
+        output_expressions.push(output);
+    }
+
+    let mut model = vars.maximise(ratio).using(default_solver);
+
+    for output in &output_expressions {
+        model = model.with(constraint!(output.clone() >= 0.0));
+    }
+
+    let mut has_target_component = false;
+    for (idx, output) in output_expressions.iter().enumerate() {
+        let required = target.metals[idx];
+        if required > 0.0 {
+            has_target_component = true;
+            model = model.with(constraint!(output.clone() >= ratio * required));
+        }
+    }
+
+    if !has_target_component {
+        return Err("Target must have at least one positive metal amount".to_string());
+    }
+
+    if !transitions.projection {
+        for var in &projection {
+            model = model.with(constraint!(*var == 0.0));
+        }
+    }
+    if !transitions.rejection {
+        for var in &rejection {
+            model = model.with(constraint!(*var == 0.0));
+        }
+    }
+    if !transitions.purification {
+        for var in &purification {
+            model = model.with(constraint!(*var == 0.0));
+        }
+    }
+    if !transitions.deposition {
+        for var in &deposition {
+            model = model.with(constraint!(*var == 0.0));
+        }
+    }
+
+    let solution = model
+        .solve()
+        .map_err(|e| format!("Linear program failed to solve: {e}"))?;
+
+    let projection_values = std::array::from_fn(|idx| solution.value(projection[idx]));
+    let rejection_values = std::array::from_fn(|idx| solution.value(rejection[idx]));
+    let purification_values = std::array::from_fn(|idx| solution.value(purification[idx]));
+    let deposition_values = std::array::from_fn(|idx| solution.value(deposition[idx]));
+    let ratio_value = solution.value(ratio);
+
+    let outputs: [f64; Metal::COUNT] = std::array::from_fn(|idx| {
+        solution.eval(output_expressions[idx].clone())
+    });
+
+    Ok(OptimalSolution {
+        ratio: ratio_value,
+        outputs,
+        projection: projection_values,
+        rejection: rejection_values,
+        purification: purification_values,
+        deposition: deposition_values,
+    })
+}
 fn main() {
     const USE_INTERACTIVE_INPUT: bool = false;
-    const MULTIPLICATION_FACTOR: f64 = 1.0;
 
     let (initial_state, target_state, available_transitions) = if !USE_INTERACTIVE_INPUT {
-        // Flip USE_INTERACTIVE_INPUT to false to use this fast test path.
-        let initial_state = SolveState::from_input("0 0 0 4 4 4 24").expect("Invalid hardcoded initial state");
+        // For testing / rapid iteration
+        let initial_state = SolveState::from_input("0 0 0 5 5 5 30").expect("Invalid hardcoded initial state");
         let target_state = SolveState::from_input("0 0 0 5 3 3 3").expect("Invalid hardcoded target state");
         let available_transitions = AvailableTransitions {
             projection: false,
@@ -392,13 +482,13 @@ fn main() {
 
         (initial_state, target_state, available_transitions)
     } else {
-        println!("Enter initial state (7 numbers for each metal: Quicksilver Lead Tin Iron Copper Silver Gold):");
+        println!("Enter initial state (7 numbers for each metal seperated by spaces: Quicksilver Lead Tin Iron Copper Silver Gold):");
         io::stdout().flush().unwrap();
         let mut input = String::new();
         io::stdin().read_line(&mut input).expect("Failed to read line");
         let initial_state = SolveState::from_input(&input).expect("Invalid input state");
 
-        println!("Enter target state (7 numbers for each metal: Quicksilver Lead Tin Iron Copper Silver Gold):");
+        println!("Enter target state (7 numbers for each metal seperated by spaces: Quicksilver Lead Tin Iron Copper Silver Gold):");
         io::stdout().flush().unwrap();
         input.clear();
         io::stdin().read_line(&mut input).expect("Failed to read line");
@@ -431,11 +521,43 @@ fn main() {
     };
 
     if !initial_state.can_theoretically_reach(&target_state, &available_transitions) {
-        println!("Target is not theoretically reachable with the selected transitions.");
+        println!("Target is completely unreachable with the selected transitions.");
         return;
     }
 
-    let mut solver = Solver::new(initial_state, target_state, available_transitions);
+    // calculate the optimal ratio and one possible optimal set of transitions
 
+    println!("Initial State: {:?}", initial_state);
+    println!("Target State: {:?}", target_state);
+    println!("Available transitions: {:?}", available_transitions);
 
+    match solve_lp(
+        &initial_state,
+        &target_state,
+        &available_transitions
+    ) {
+        Ok(solution) => {
+            println!("Optimal solution found:\n{:?}", solution);
+        }
+        Err(error) => {
+            println!("Failed to solve optimization problem: {error}");
+        }
+    }
 }
+
+
+/*
+Mathematical relationships:
+Inputs: I0 to I6, U0 to U6
+Knobs: P2 to P6, R2 to R6, Pu2 to Pu6, D2 to D6
+Outputs: O0 to O6
+Maximize min(O0/U0, O1/U1, ..., O6/U6)
+Constraint: O, P, R, Pu, D >= 0
+O0 = I0 + R2 + R3 + R4 + R5 + R6 - P2 - P3 - P4 - P5 - P6
+O1 = I1      - P2 + R2            - 2.0 * Pu2      + 2.0 * D2 + D3     
+O2 = I2 + P2 - P3 + R3 - R2 + Pu2 - 2.0 * Pu3 + D3 + 2.0 * D4 + D5 - D2
+O3 = I3 + P3 - P4 + R4 - R3 + Pu3 - 2.0 * Pu4 + D5 + 2.0 * D6      - D3
+O4 = I4 + P4 - P5 + R5 - R4 + Pu4 - 2.0 * Pu5                      - D4
+O5 = I5 + P5 - P6 + R6 - R5 + Pu5 - 2.0 * Pu6                      - D5
+O6 = I6 + P6           - R6 + Pu6                                  - D6
+*/
