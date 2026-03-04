@@ -1,7 +1,5 @@
 
 use std::fmt::Debug;
-use crate::ui::CachedTextSizer;
-use macroquad::prelude::{Font, Texture2D};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -58,7 +56,8 @@ impl Metal {
         ]
     }
 
-    pub const fn next(self) -> Option<Self> {
+    pub const fn get_next(self) -> Option<Self> { 
+        //what you'd get if you purified/projected a metal
         match self {
             Metal::Lead => Some(Metal::Tin),
             Metal::Tin => Some(Metal::Iron),
@@ -68,7 +67,9 @@ impl Metal {
             Metal::Gold | Metal::Quicksilver => None,
         }
     }
-    pub const fn prev(self) -> Option<Self> {
+
+    pub const fn get_prev(self) -> Option<Self> { 
+        // same but rejection
         match self {
             Metal::Tin => Some(Metal::Lead),
             Metal::Iron => Some(Metal::Tin),
@@ -78,7 +79,33 @@ impl Metal {
             Metal::Quicksilver | Metal::Lead => None,
         }
     }
-    pub const fn get_split_metals(self) -> Option<(Self, Self)> {
+
+    pub fn get_higher_metals(self) -> Vec<Self> {
+        // if you had infinite of this metal, what could you get by purifying/projecting
+        let mut metals = Vec::new();
+        let mut current = self.get_next();
+        while let Some(metal) = current {
+            metals.push(metal);
+            current = metal.get_next();
+        }
+        metals
+    }
+
+    pub fn get_lower_metals(self) -> Vec<Self> {
+        // if you had infinite of this metal, what could you get by rejecting
+        let mut metals = Vec::new();
+        let mut current = self.get_prev();
+        while let Some(metal) = current {
+            metals.push(metal);
+            current = metal.get_prev();
+        }
+        metals
+    }
+
+    pub const fn get_split_metals(self) -> Option<(Self, Self)> { 
+        // same but deposition, actually used for caluclating possible metals you can reach with a given set of transitions
+        // if you add an eigth normal metal or higher, please review theoretically_reachable_metals in solver.rs 
+        // to make sure it accounts for the fact that depositing a metal of value 8 does not allow you to reach 3
         match self {
             Metal::Lead => None,
             Metal::Tin => Some((Metal::Lead, Metal::Lead)),
@@ -92,50 +119,142 @@ impl Metal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum Transition {
-    Projection, // Uses one QS to raise a metal to the next level //names
-    Rejection, // Lowers a metal and yields a QS
-    Purification, // Turns two metals into one of the next level
-    Deposition, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
+    Projection = 0, // Uses one QS to raise a metal to the next level
+    Rejection = 1, // Lowers a metal and yields a QS
+    Purification = 2, // Turns two metals into one of the next level
+    Deposition = 3, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
+    // Antiquation = 4, // Example extra transition
+}
+
+impl Transition {
+    pub const COUNT: usize = 4;
+    // pub const COUNT: usize = 5; //Antiquation
+
+    pub const fn idx(self) -> usize {
+        self as usize
+    }
+
+    pub const fn from(idx: usize) -> Self {
+        match idx {
+            0 => Transition::Projection,
+            1 => Transition::Rejection,
+            2 => Transition::Purification,
+            3 => Transition::Deposition,
+            // 4 => Transition::Antiquation,
+            _ => panic!("Invalid transition index"),
+        }
+    }
+    
+    pub const fn all() -> [Self; Self::COUNT] {
+        [
+            Transition::Projection,
+            Transition::Rejection,
+            Transition::Purification,
+            Transition::Deposition,
+            // Transition::Antiquation,
+        ]
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Transition::Projection => "Projection",
+            Transition::Rejection => "Rejection",
+            Transition::Purification => "Purification",
+            Transition::Deposition => "Deposition",
+            // Transition::Antiquation => "Antiquation",
+        }
+    }
+
+    pub const fn short_name(self) -> &'static str {
+        match self {
+            Transition::Projection => "Pro",
+            Transition::Rejection => "Rej",
+            Transition::Purification => "Pur",
+            Transition::Deposition => "Dep",
+            // Transition::Antiquation => "Ant",
+        }
+    }
+
+    pub const fn valid_targets(self) -> [bool; Metal::COUNT] {
+        // determines which fields in the UI will show up. This has no effect on the solving logic
+        match self {
+            Transition::Projection => [false, true, true, true, true, true, false], //You can project anything other than QS and Gold
+            Transition::Rejection => [false, false, true, true, true, true, true], //You can reject anything tin or above other than QS
+            Transition::Purification => [false, true, true, true, true, true, false], //You can purify anything tin or above other than QS and Gold
+            Transition::Deposition => [false, false, true, true, true, true, true], //You can deposit anything tin or above other than QS
+            // Transition::Antiquation => [true, true, true, true, true, true, true], //Example transition that can be applied to any metal
+        }
+    }
+    pub const fn is_valid_target(self, metal: Metal) -> bool {
+        self.valid_targets()[metal.idx()]
+    }
 }
 
 #[derive(Clone, Copy)]
 pub struct AvailableTransitions {
-    pub projection: bool, //names
-    pub rejection: bool,
-    pub purification: bool,
-    pub deposition: bool,
+    transitions: [bool; Transition::COUNT],
 }
 
 impl AvailableTransitions {
     pub fn get(&self, transition: Transition) -> bool {
-        match transition {
-            Transition::Projection => self.projection, //names
-            Transition::Rejection => self.rejection,
-            Transition::Purification => self.purification,
-            Transition::Deposition => self.deposition,
+        self.transitions[transition as usize]
+    }
+
+    pub fn set(&mut self, transition: Transition, value: bool) {
+        self.transitions[transition as usize] = value;
+    }
+
+    pub fn from_names(input: &str) -> Result<Self, String> {
+        if input == "All" {
+            return Ok(AvailableTransitions { transitions: [true; Transition::COUNT] });
+        } else if input == "None" {
+            return Ok(AvailableTransitions { transitions: [false; Transition::COUNT] });
         }
+        let mut transitions = [false; Transition::COUNT];
+        let long_names = Transition::all().map(|t| t.name());
+        let short_names = Transition::all().map(|t| t.short_name());
+        for part in input.split_whitespace() {
+            let transition = long_names.iter().chain(short_names.iter()).position(|&name| name == part)
+                .ok_or_else(|| format!("Invalid transition name: {}", part))?;
+            transitions[transition] = true;
+        }
+        Ok(AvailableTransitions { transitions })
+    }
+
+    pub fn from_bool_string(input: &str) -> Result<Self, String> {
+        let mut transitions = [false; Transition::COUNT];
+        for (i, part) in input.split_whitespace().enumerate() {
+            if i >= Transition::COUNT {
+                return Err(format!("Too many values for transitions: expected {}, got {}", Transition::COUNT, i + 1));
+            }
+            match part.to_ascii_lowercase().as_str() {
+                "1" | "y" | "true"=> transitions[i] = true,
+                "0" | "n" | "false" => transitions[i] = false,
+                _ => return Err(format!("Invalid value for transition {}: {}", i, part)),
+            }
+        }
+        Ok(AvailableTransitions { transitions })
+    }
+
+    pub fn from_input(input: &str) -> Result<Self, String> {
+        Self::from_bool_string(input).or_else(|_| Self::from_names(input))
     }
 }
 
 impl std::fmt::Debug for AvailableTransitions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut transitions = Vec::new(); //names
-        if self.projection {
-            transitions.push("Pro");
-        }
-        if self.rejection {
-            transitions.push("Rej");
-        }
-        if self.purification {
-            transitions.push("Pur");
-        }
-        if self.deposition {
-            transitions.push("Dep");
+        let mut transitions = Vec::new();
+        for i in 0..Transition::COUNT {
+            let transition = Transition::from(i);
+            if self.get(transition) {
+                transitions.push(transition.short_name());
+            }
         }
         let output = match transitions.len() {
             0 => "None".to_string(),
-            4 => "All".to_string(), //four
+            Transition::COUNT => "All".to_string(),
             _ => transitions.join(", "),
         };
         write!(f, "[{}]", output)
@@ -178,10 +297,17 @@ impl SolveState {
 pub struct OptimalSolution {
     pub ratio: f64,
     pub outputs: [f64; Metal::COUNT],
-    pub projection: [f64; 5], //names
-    pub rejection: [f64; 5],
-    pub purification: [f64; 5],
-    pub deposition: [f64; 5],
+    pub values: [f64; Metal::COUNT * Transition::COUNT],
+}
+
+impl OptimalSolution {
+    pub fn get_transition_value(&self, transition: Transition, metal: Metal) -> Option<f64> {
+        if transition.is_valid_target(metal) {
+            Some(self.values[transition.idx() * Metal::COUNT + metal.idx()])
+        } else {
+            None
+        }
+    }
 }
 
 impl Debug for OptimalSolution {
@@ -199,19 +325,15 @@ impl Debug for OptimalSolution {
         }
         let mut potencies_string = "Transition potencies:\n".to_string();
 
-        for (transition_type, transition_values, metals_index_offset) in [ //names //four
-            ("Projection", &self.projection, 1),
-            ("Rejection", &self.rejection, 2),
-            ("Purification", &self.purification, 1),
-            ("Deposition", &self.deposition, 2),
-        ] {
+        for transition in Transition::all() {
+            let transition_values = &self.values[transition.idx() * Metal::COUNT..(transition.idx() + 1) * Metal::COUNT];
             if transition_values.iter().all(|&x| x == 0.0) {
-                potencies_string += &format!("- {}: N/A\n", transition_type);
+                potencies_string += &format!("- {}: N/A\n", transition.name());
             } else {
-                potencies_string += &format!("- {} on:\n", transition_type);
+                potencies_string += &format!("- {} on:\n", transition.name());
                 for (index, value) in transition_values.iter().enumerate() {
                     if *value == 0.0 {continue;}
-                    potencies_string += &format!("  - {:?}: {} ({})\n", Metal::from(index + metals_index_offset), decimal_to_fraction(*value), format_rounded(*value, 5));
+                    potencies_string += &format!("  - {:?}: {} ({})\n", Metal::from(index), decimal_to_fraction(*value), format_rounded(*value, 5));
                 }
             }
         }
@@ -232,7 +354,7 @@ fn check_repeating(digits: &str, repeat_start: usize, repeat_length: usize) -> b
 }
 
 pub fn format_rounded(value: f64, max_digits: usize) -> String {
-    if value.round() == value {
+    if value.round() == value || max_digits == 0 {
         return format!("{:.0}", value);
     }
     let value_string = value.to_string();
@@ -255,7 +377,7 @@ pub fn decimal_to_fraction(value: f64) -> String {
     let tolerance = 1e-6;
     let mut numerator = 1;
     let mut denominator = 1;
-    if value.round() == value {
+    if (value.round() - value).abs() < 1e-7 {
         return format!("{:.0}", value);
     }
 
@@ -275,15 +397,3 @@ pub fn decimal_to_fraction(value: f64) -> String {
         format!("{}/{}", numerator, denominator)
     }
 }
-
-pub struct UI {
-    pub text_renderer: CachedTextSizer,
-    pub letter_font: Option<Font>,
-    pub number_font: Option<Font>,
-    pub textures: Vec<Texture2D>,
-    pub inputs: SolveState,
-    pub target: SolveState,
-    pub available_transitions: AvailableTransitions,
-    pub solution: Option<OptimalSolution>,
-}
-

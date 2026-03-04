@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod model;
 use macroquad::prelude::{is_mouse_button_pressed, mouse_position, MouseButton};
 use macroquad::window::next_frame;
@@ -11,37 +13,23 @@ use ui::*;
 #[macroquad::main(window_conf)]
 async fn main() {
     display_loading_screen().await;
-    let initial_state = SolveState::from_input("0 0 0 500 500 500 3560").expect("Invalid hardcoded initial state");
-    let target_state = SolveState::from_input("0 0 0 5 3 3 3").expect("Invalid hardcoded target state");
-    let available_transitions = AvailableTransitions { //names
-        projection: false,
-        rejection: true,
-        purification: false,
-        deposition: true,
-    };
+    let initial_state = SolveState::from_input("1 1 0 0 0 0 0").expect("Invalid hardcoded initial state");
+    let target_state = SolveState::from_input("0 0 1 0 0 0 0").expect("Invalid hardcoded target state");
+    let available_transitions = AvailableTransitions::from_input("1 0 0 0").expect("Invalid hardcoded available transitions");
 
-    let mut ui = UI {
-        text_renderer: CachedTextSizer::new(),
-        letter_font: None,
-        number_font: None,
-        textures: vec![],
-        inputs: initial_state,
-        target: target_state,
-        available_transitions,
-        solution: None,
-    };
+    let mut ui = UI::new(initial_state, target_state, available_transitions);
 
-    ui.load_font().await;
-    ui.load_textures().await;
+    ui.load_assets().await;
     ui.solve();
 
     loop {
+        let (x, y) = mouse_position();
         if is_mouse_button_pressed(MouseButton::Left) {
-            let (x, y) = mouse_position();
-            ui.handle_click(x, y);
+            let shift = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftShift) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightShift);
+            let ctrl = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftControl) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightControl);
+            ui.handle_click(x, y, shift, ctrl);
         }
-
-        ui.draw();
+        ui.draw(x, y);
         next_frame().await;
     }
 }

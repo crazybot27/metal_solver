@@ -1,10 +1,10 @@
 use macroquad::miniquad::conf::Icon;
 use macroquad::prelude::*;
 use std::collections::HashMap;
-use std::fs;
 use std::sync::Mutex;
 
 use crate::model::*;
+use crate::solver::solve_lp;
 
 const IMAGE_BYTES: [&[u8]; Metal::COUNT] = [
     include_bytes!("assets/quicksilver_symbol.png"),
@@ -50,6 +50,8 @@ const COLOR_OUTPUT_RATIO_BORDER: Color = Color::new(0.45, 0.55, 0.66, 1.0);
 const COLOR_OUTPUT_TEXT: Color = Color::new(0.78, 0.91, 0.92, 1.0);
 const COLOR_TRANSITION_TEXT: Color = Color::new(0.95, 0.91, 0.8, 1.0);
 const COLOR_DISABLED_ROW_OVERLAY: Color = Color::new(0.03, 0.03, 0.04, 0.6);
+const COLOR_CLICKABLE_OVERLAY: Color = Color::new(0.55, 0.74, 0.96, 0.22);
+const COLOR_CLICK_HINT_GLYPH: Color = Color::new(0.88, 0.95, 1.0, 0.75);
 
 pub async fn display_loading_screen() {
     clear_background(COLOR_BACKGROUND);
@@ -57,20 +59,26 @@ pub async fn display_loading_screen() {
     next_frame().await;
 }
 
-const ROW_LABELS: [&str; 8] = [ //names //four
-    "Metal",
-    "Input",
-    "Output",
-    "Solution",
-    "Projection",
-    "Rejection",
-    "Purification",
-    "Deposition",
-];
+const ROW_COUNT: usize = 4+Transition::COUNT;
+const fn generate_row_labels() -> [&'static str; ROW_COUNT] {
+    let mut labels = [""; ROW_COUNT];
+    labels[0] = "Metal";
+    labels[1] = "Input";
+    labels[2] = "Target";
+    labels[3] = "Output";
+
+    let mut idx = 0;
+    while idx < Transition::COUNT {
+        labels[4 + idx] = Transition::all()[idx].name();
+        idx += 1;
+    }
+    labels
+}
+const ROW_LABELS: [&str; ROW_COUNT] = generate_row_labels();
 
 const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
-const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium.tif");
-const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small.tif");
+const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium_2.tif");
+const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small_2.tif");
 
 fn tiff_rgba_to_array<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
     if bytes.len() < N + 8 {
@@ -102,8 +110,36 @@ pub fn window_conf() -> Conf {
     }
 }
 
+pub struct UI {
+    text_renderer: CachedTextSizer,
+    letter_font: Option<Font>,
+    number_font: Option<Font>,
+    textures: Vec<Texture2D>,
+    inputs: SolveState,
+    target: SolveState,
+    available_transitions: AvailableTransitions,
+    solution: Result<OptimalSolution, String>,
+}
+
 impl UI {
-    pub fn handle_click(&mut self, x: f32, y: f32) {
+    pub fn new(
+        inputs: SolveState,
+        target: SolveState,
+        available_transitions: AvailableTransitions,
+    ) -> Self {
+        Self {
+            text_renderer: CachedTextSizer::new(),
+            letter_font: None,
+            number_font: None,
+            textures: vec![],
+            inputs,
+            target,
+            available_transitions,
+            solution: Err("No solution yet".to_string()),
+        }
+    }
+
+    pub fn handle_click(&mut self, x: f32, y: f32, shift_state: bool, ctrl_state: bool) {
         let total_grid_width = screen_width() - OUTER_MARGIN_X * 2.0;
         let total_grid_height = screen_height() - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
 
@@ -117,91 +153,91 @@ impl UI {
 
         let row_h = total_grid_height / ROW_LABELS.len() as f32;
         let row_idx = ((y - OUTER_MARGIN_TOP) / row_h).floor() as usize;
+        let cell_w = (total_grid_width - LABEL_COLUMN_WIDTH) / Metal::COUNT as f32;
 
-        let mut changed = true;
-        match row_idx {
-            4 => self.available_transitions.projection = !self.available_transitions.projection, //names //four
-            5 => self.available_transitions.rejection = !self.available_transitions.rejection,
-            6 => self.available_transitions.purification = !self.available_transitions.purification,
-            7 => self.available_transitions.deposition = !self.available_transitions.deposition,
-            _ => changed = false,
+        if (1..=2).contains(&row_idx) && x >= OUTER_MARGIN_X + LABEL_COLUMN_WIDTH {
+            let cell_x = x - (OUTER_MARGIN_X + LABEL_COLUMN_WIDTH);
+            let metal_idx = (cell_x / cell_w).floor() as usize;
+
+            if metal_idx < Metal::COUNT {
+                let cell_left_x = OUTER_MARGIN_X + LABEL_COLUMN_WIDTH + metal_idx as f32 * cell_w;
+                let is_right_half = x >= cell_left_x + cell_w * 0.5;
+                let step = if shift_state && ctrl_state {
+                    1000.0
+                } else if ctrl_state {
+                    100.0
+                } else if shift_state {
+                    10.0
+                } else {
+                    1.0
+                };
+                let delta = if is_right_half { step } else { -step };
+
+                if row_idx == 1 {
+                    let current = self.inputs.metals[metal_idx];
+                    self.inputs.metals[metal_idx] = (current + delta).max(0.0);
+                } else {
+                    let current = self.target.metals[metal_idx];
+                    self.target.metals[metal_idx] = (current + delta).max(0.0);
+                }
+
+                self.solve();
+                return;
+            }
         }
 
-        if changed {
+        if (4..ROW_COUNT).contains(&row_idx) {
+            let transition = Transition::from(row_idx-4);
+            let is_enabled = self.available_transitions.get(transition);
+            self.available_transitions.set(transition, !is_enabled);
             self.solve();
         }
     }
 
     fn transition_enabled(&self, row_idx: usize) -> bool {
-        match row_idx {
-            4 => self.available_transitions.projection, //names //four
-            5 => self.available_transitions.rejection,
-            6 => self.available_transitions.purification,
-            7 => self.available_transitions.deposition,
-            _ => true,
+        if (4..ROW_COUNT).contains(&row_idx) {
+            let transition = Transition::from(row_idx-4);
+            let is_enabled = self.available_transitions.get(transition);
+            return is_enabled;
         }
+        false
     }
 
-    pub async fn load_font(&mut self) {
+    pub async fn load_assets(&mut self) {
         if let Ok(font) = load_ttf_font_from_bytes(LETTER_FONT_BYTES) {
             self.letter_font = Some(font);
-            println!("Loaded embedded letter font");
         }
-
         if let Ok(font) = load_ttf_font_from_bytes(NUMBER_FONT_BYTES) {
             self.number_font = Some(font);
-            println!("Loaded embedded number font");
         }
-
         if self.letter_font.is_none() {
             println!("Failed to load embedded letter font; using Macroquad default font for labels.");
         }
         if self.number_font.is_none() {
             println!("Failed to load embedded number font; using Macroquad default font for numbers.");
         }
-    }
 
-    pub async fn load_textures(&mut self) {
         let mut textures: [Option<Texture2D>; Metal::COUNT] = std::array::from_fn(|_| None);
-
-            for idx in 0..Metal::COUNT {
-                let texture = Texture2D::from_file_with_format(IMAGE_BYTES[idx], None);
-                texture.set_filter(FilterMode::Linear);
-                textures[idx] = Some(texture);
-            }
-            self.textures = textures.iter().filter_map(|t| t.clone()).collect();
-    }
-
-    fn format_integer(&self, value: f64) -> String {
-        if value.abs() < 1e-9 {
-            "0".to_string()
-        } else {
-            format!("{}", value.round() as i64)
+        for idx in 0..Metal::COUNT {
+            let texture = Texture2D::from_file_with_format(IMAGE_BYTES[idx], None);
+            texture.set_filter(FilterMode::Linear);
+            textures[idx] = Some(texture);
         }
+        self.textures = textures.iter().filter_map(|t| t.clone()).collect();
     }
 
-    fn format_fraction(&self, value: f64) -> String {
-        if value.abs() < 1e-9 {
-            "0".to_string()
-        } else {
-            decimal_to_fraction(value)
-        }
-    }
-
-    fn transition_value(&self, solution: &Option<OptimalSolution>, row_idx: usize, metal_idx: usize) -> String {
-        let Some(solution) = solution else {
+    fn transition_value(&self, row_idx: usize, metal: Metal) -> String {
+        let Ok(solution) = &self.solution else {
             return "/".to_string();
         };
 
-        let value = match row_idx {
-            4 if (1..=5).contains(&metal_idx) => Some(solution.projection[metal_idx - 1]), //names //four
-            5 if (2..=6).contains(&metal_idx) => Some(solution.rejection[metal_idx - 2]),
-            6 if (1..=5).contains(&metal_idx) => Some(solution.purification[metal_idx - 1]),
-            7 if (2..=6).contains(&metal_idx) => Some(solution.deposition[metal_idx - 2]),
-            _ => None,
-        };
-
-        value.map(|v| self.format_fraction(v)).unwrap_or_else(|| "".to_string())
+        let transition = Transition::from(row_idx - 4);
+        let value = solution.get_transition_value(transition, metal);
+        if let Some(value) = value {
+            decimal_to_fraction(value)
+        } else {
+            "".to_string()
+        }
     }
 
     fn draw_text_in_rect(&self, text: &str, rect: Rect, color: Color, font_kind: FontKind) {
@@ -244,7 +280,7 @@ impl UI {
         }
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&self, mouse_x: f32, mouse_y: f32) {
         clear_background(COLOR_BACKGROUND);
 
         let total_grid_width = screen_width() - OUTER_MARGIN_X * 2.0;
@@ -267,13 +303,24 @@ impl UI {
             let label_rect = Rect::new(OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h);
 
             draw_rectangle_lines(OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h, GRID_LABEL_BORDER_THICKNESS, GRAY);
+
+            if (4..ROW_COUNT).contains(&row_idx) {
+                draw_rectangle(
+                    label_rect.x,
+                    label_rect.y,
+                    label_rect.w,
+                    label_rect.h,
+                    COLOR_CLICKABLE_OVERLAY,
+                );
+            }
+
             self.draw_label_text_in_rect(row_label, label_rect, WHITE);
 
             for metal_idx in 0..Metal::COUNT {
                 let x = OUTER_MARGIN_X + LABEL_COLUMN_WIDTH + metal_idx as f32 * cell_w;
                 let cell_rect = Rect::new(x, y, cell_w, row_h);
                 draw_rectangle_lines(x, y, cell_w, row_h, GRID_CELL_BORDER_THICKNESS, DARKGRAY);
-
+    
                 match row_idx {
                     0 => {
                         let side = (row_h * ICON_ROW_HEIGHT_FACTOR).min(cell_w * ICON_COL_WIDTH_FACTOR);
@@ -289,30 +336,46 @@ impl UI {
                         );
                     }
                     1 => {
+                        draw_rectangle(x, y, cell_w, row_h, COLOR_CLICKABLE_OVERLAY);
                         let value = self.inputs.get(Metal::from(metal_idx));
-                        self.draw_number_text_in_rect(&self.format_integer(value), cell_rect, WHITE);
+                        self.draw_number_text_in_rect(&format_rounded(value, 0), cell_rect, WHITE);
+
+                        if mouse_x >= x && mouse_x <= x + cell_w && mouse_y >= y && mouse_y <= y + row_h {
+                            let left_hint_rect = Rect::new(x, y, cell_w * 0.5, row_h);
+                            let right_hint_rect = Rect::new(x + cell_w * 0.5, y, cell_w * 0.5, row_h);
+                            self.draw_label_text_in_rect("-", left_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                            self.draw_label_text_in_rect("+", right_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                        }
                     }
                     2 => {
+                        draw_rectangle(x, y, cell_w, row_h, COLOR_CLICKABLE_OVERLAY);
                         let value = self.target.get(Metal::from(metal_idx));
-                        self.draw_number_text_in_rect(&self.format_integer(value), cell_rect, WHITE);
+                        self.draw_number_text_in_rect(&format_rounded(value, 0), cell_rect, WHITE);
+
+                        if mouse_x >= x && mouse_x <= x + cell_w && mouse_y >= y && mouse_y <= y + row_h {
+                            let left_hint_rect = Rect::new(x, y, cell_w * 0.5, row_h);
+                            let right_hint_rect = Rect::new(x + cell_w * 0.5, y, cell_w * 0.5, row_h);
+                            self.draw_label_text_in_rect("-", left_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                            self.draw_label_text_in_rect("+", right_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                        }
                     }
                     3 => {
-                        let text = if let Some(solution) = &self.solution {
-                            self.format_fraction(solution.outputs[metal_idx])
+                        let text = if let Ok(solution) = &self.solution {
+                            decimal_to_fraction(solution.outputs[metal_idx])
                         } else {
                             "/".to_string()
                         };
                         self.draw_number_text_in_rect(&text, cell_rect, COLOR_OUTPUT_TEXT);
                     }
-                    4..=7 => { //four
-                        let text = self.transition_value(&self.solution, row_idx, metal_idx);
+                    4..ROW_COUNT => {
+                        let text = self.transition_value(row_idx, Metal::from(metal_idx));
                         self.draw_number_text_in_rect(&text, cell_rect, COLOR_TRANSITION_TEXT);
                     }
                     _ => {}
                 }
             }
 
-            if (4..=7).contains(&row_idx) && !self.transition_enabled(row_idx) { //four
+            if (4..ROW_COUNT).contains(&row_idx) && !self.transition_enabled(row_idx) {
                 draw_rectangle(
                     OUTER_MARGIN_X,
                     y,
@@ -336,17 +399,26 @@ impl UI {
         let ratio_label_x = OUTER_MARGIN_X;
         let ratio_label_w = total_grid_width * 0.56;
         let ratio_label_rect = Rect::new(ratio_label_x, ratio_box_y, ratio_label_w, OUTPUT_RATIO_HEIGHT);
-        self.draw_label_text_in_rect("Total Ratio Achieved:", ratio_label_rect, WHITE);
+        match &self.solution {
+            Ok(solution) => {
+                self.draw_label_text_in_rect("Total Ratio Achieved:", ratio_label_rect, COLOR_OUTPUT_TEXT);
+                let ratio_value_x = OUTER_MARGIN_X + total_grid_width * 0.56;
+                let ratio_value_w = total_grid_width * 0.42;
+                let ratio_value_rect = Rect::new(ratio_value_x, ratio_box_y, ratio_value_w, OUTPUT_RATIO_HEIGHT);
+                let ratio_value_text = format!("{} ({})", format_rounded(solution.ratio, 4), decimal_to_fraction(solution.ratio));
+                self.draw_number_text_in_rect(&ratio_value_text, ratio_value_rect, WHITE);
+            }
+            Err(err) => {
+                let error_x = OUTER_MARGIN_X;
+                let error_w = total_grid_width;
+                let error_rect = Rect::new(error_x, ratio_box_y, error_w, OUTPUT_RATIO_HEIGHT);
+                self.draw_label_text_in_rect(err, error_rect, COLOR_OUTPUT_TEXT);
+            }
+        }
+    }
 
-        let ratio_value_text = if let Some(solution) = &self.solution {
-            format_rounded(solution.ratio, 8)
-        } else {
-            "N/A".to_string()
-        };
-        let ratio_value_x = OUTER_MARGIN_X + total_grid_width * 0.56;
-        let ratio_value_w = total_grid_width * 0.42;
-        let ratio_value_rect = Rect::new(ratio_value_x, ratio_box_y, ratio_value_w, OUTPUT_RATIO_HEIGHT);
-        self.draw_number_text_in_rect(&ratio_value_text, ratio_value_rect, WHITE);
+    pub fn solve(&mut self) {
+        self.solution = solve_lp(&self.inputs, &self.target, &self.available_transitions);
     }
 }
 
