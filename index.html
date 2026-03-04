@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metal Ratio Solver</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 50px;
+            background-color: #000;
+            color: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #222;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #fff;
+        }
+        th {
+            background-color: #333;
+            color: white;
+        }
+        tr:hover {
+            background-color: #333;
+        }
+        .row-label {
+            font-weight: bold;
+            background-color: #333;
+        }
+    </style>
+</head>
+<body>
+    <table id="the-table">
+    </table>
+
+    <script type="module">
+        import init, { solve_ratio, get_metal_names, get_transition_names } from './metal_solver_wasm.js';
+
+        const statusEl = document.getElementById('status');
+
+        async function run() {
+            try {
+                await init();
+            } catch (err) {
+                console.error(err);
+                return;
+            }
+
+            const METAL_NAMES = JSON.parse(get_metal_names());
+            const TRANSITION_NAMES = JSON.parse(get_transition_names());
+            populateTable(METAL_NAMES, TRANSITION_NAMES);
+        }
+
+        function populateTable(metalNames, transitionNames) {
+            const table = document.getElementById('the-table');
+            
+            // Clear existing content
+            table.innerHTML = '';
+
+            // Create header row with metals
+            const headerRow = document.createElement('tr');
+            
+            // Empty corner cell for row labels
+            const cornerCell = document.createElement('th');
+            cornerCell.textContent = 'Metal';
+            headerRow.appendChild(cornerCell);
+
+            // Add metal headers
+            metalNames.forEach(metal => {
+                const th = document.createElement('th');
+                th.textContent = metal;
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+
+            // Define the row labels from ui.rs structure
+            const rowLabels = ['Input', 'Target', 'Output', ...transitionNames];
+
+            // Create data rows
+            rowLabels.forEach(label => {
+                const row = document.createElement('tr');
+                
+                // Row label cell
+                const labelCell = document.createElement('td');
+                labelCell.textContent = label;
+                labelCell.className = 'row-label';
+                row.appendChild(labelCell);
+
+                // Add cells for each metal
+                metalNames.forEach(metal => {
+                    const cell = document.createElement('td');
+                    cell.textContent = '0';
+                    cell.dataset.metal = metal;
+                    cell.dataset.field = label;
+                    row.appendChild(cell);
+                });
+
+                table.appendChild(row);
+            });
+        }
+
+        // Run the initialization
+        run().catch((err) => {
+            statusEl.textContent = "Failed to load WebAssembly";
+            console.error(err);
+        });
+    </script>
+</body>

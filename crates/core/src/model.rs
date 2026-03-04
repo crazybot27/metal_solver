@@ -116,6 +116,18 @@ impl Metal {
             Metal::Quicksilver => None,
         }
     }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Metal::Quicksilver => "Quicksilver",
+            Metal::Lead => "Lead",
+            Metal::Tin => "Tin",
+            Metal::Iron => "Iron",
+            Metal::Copper => "Copper",
+            Metal::Silver => "Silver",
+            Metal::Gold => "Gold",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -308,6 +320,79 @@ impl OptimalSolution {
             None
         }
     }
+
+    pub fn to_json_string(&self, use_names: bool, pretty_values: bool) -> String {
+        let mut output = String::from("");
+
+        let ratio = if pretty_values {
+            format!("{} ({})", format_rounded(self.ratio, 4), self.ratio)
+        } else {
+            self.ratio.to_string()
+        };
+        output.push_str(&format!("{{\"ratio\":\"{}\",", ratio));
+
+        let mut metal_outputs_string = String::from("\"outputs\":");
+        if use_names {metal_outputs_string.push('{');} else {metal_outputs_string.push('[');}
+        for (idx, metal) in Metal::all().iter().enumerate() {
+            if idx > 0 {
+                metal_outputs_string.push(',');
+            }
+            if use_names {
+                metal_outputs_string.push('"');
+                metal_outputs_string.push_str(&format!("{:?}", metal));
+                metal_outputs_string.push_str("\":");
+            }
+            let output_value = if pretty_values {
+                decimal_to_fraction(self.outputs[metal.idx()])
+            } else {
+                self.outputs[metal.idx()].to_string()
+            };
+            metal_outputs_string.push_str(&output_value);
+        }
+        if use_names {metal_outputs_string.push('}');} else {metal_outputs_string.push(']');}
+        output.push_str(&metal_outputs_string);
+
+        let mut transitions_string = String::from("\"transitions\":");
+        if use_names {transitions_string.push('{');} else {transitions_string.push('[');}
+        for (t_idx, transition) in Transition::all().iter().enumerate() {
+            if t_idx > 0 {
+                transitions_string.push(',');
+            }
+            if use_names {
+                transitions_string.push('"');
+                transitions_string.push_str(transition.name());
+                transitions_string.push_str("\":");
+            }
+            let mut transition_values_string = String::new();
+            if use_names {transition_values_string.push('{');} else {transition_values_string.push('[');}
+            for (m_idx, metal) in Metal::all().iter().enumerate() {
+                if m_idx > 0 {
+                    transition_values_string.push(',');
+                }
+                if use_names {
+                    transition_values_string.push('"');
+                    transition_values_string.push_str( metal.name());
+                    transition_values_string.push_str("\":");
+                }
+                if let Some(value) = self.get_transition_value(*transition, *metal) {
+                    let value_string = if pretty_values {
+                        decimal_to_fraction(value)
+                    } else {
+                        value.to_string()
+                    };
+                    transition_values_string.push_str(&value_string);
+                } else {
+                    transition_values_string.push_str("null");
+                }
+            }
+            if use_names {transition_values_string.push('}');} else {transition_values_string.push(']');}
+            transitions_string.push_str(&transition_values_string);
+        }
+        if use_names {transitions_string.push('}');} else {transitions_string.push(']');}
+        output.push_str(&transitions_string);
+        output.push('}');
+        output
+    }
 }
 
 impl Debug for OptimalSolution {
@@ -396,4 +481,19 @@ pub fn decimal_to_fraction(value: f64) -> String {
     } else {
         format!("{}/{}", numerator, denominator)
     }
+}
+
+pub fn escape_json_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
