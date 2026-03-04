@@ -19,6 +19,10 @@ const IMAGE_BYTES: [&[u8]; Metal::COUNT] = [
 const LETTER_FONT_BYTES: &[u8] = include_bytes!("assets/old_english.ttf");
 const NUMBER_FONT_BYTES: &[u8] = include_bytes!("assets/french_script.ttf");
 
+const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
+const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium.tif");
+const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small.tif");
+
 // const METAL_LABELS: [&str; Metal::COUNT] = ["QS", "Pb", "Sn", "Fe", "Cu", "Ag", "Au"];
 
 const DEFAULT_WINDOW_WIDTH: i32 = 1920;
@@ -75,10 +79,6 @@ const fn generate_row_labels() -> [&'static str; ROW_COUNT] {
     labels
 }
 const ROW_LABELS: [&str; ROW_COUNT] = generate_row_labels();
-
-const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
-const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium_2.tif");
-const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small_2.tif");
 
 fn tiff_rgba_to_array<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
     if bytes.len() < N + 8 {
@@ -243,6 +243,51 @@ impl UI {
         }
     }
 
+    fn draw_add_sub_hints(&self, rect: Rect, shift_state: bool, ctrl_state: bool) {
+        let plus_text_params = TextParams {
+            font: self.get_font(FontKind::Letters),
+            font_size: (rect.h * 0.7).round() as u16,
+            color: COLOR_CLICK_HINT_GLYPH,
+            ..Default::default()
+        };
+        let plus_x = rect.x + rect.w * 0.7;
+        let plus_y = rect.y + rect.h * 0.75;
+        draw_text_ex("+", plus_x, plus_y, plus_text_params);
+        let minus_text_params = TextParams {
+            font: self.get_font(FontKind::Letters),
+            font_size: (rect.h * 1.5).round() as u16,
+            color: COLOR_CLICK_HINT_GLYPH,
+            ..Default::default()
+        };
+        let minus_x = rect.x + rect.w * 0.0;
+        let minus_y = rect.y + rect.h * 0.9108;
+        draw_text_ex("-", minus_x, minus_y, minus_text_params);
+        // make left slightly darker and right slightly lighter to hint at which is which
+        let overlay_multiplier = if shift_state && ctrl_state {
+            3.0
+        } else if ctrl_state {
+            2.1
+        } else if shift_state {
+            1.4
+        } else {
+            0.9
+        };
+        draw_rectangle(
+            rect.x,
+            rect.y,
+            rect.w * 0.5,
+            rect.h,
+            Color::new(0.0, 0.0, 0.0, 0.09 * overlay_multiplier)
+        );
+        draw_rectangle(
+            rect.x + rect.w * 0.5,
+            rect.y,
+            rect.w * 0.5,
+            rect.h,
+            Color::new(1.0, 1.0, 1.0, 0.05 * overlay_multiplier)
+        );
+    }
+
     fn draw_text_in_rect(&self, text: &str, rect: Rect, color: Color, font_kind: FontKind) {
         if text.is_empty() {
             return;
@@ -283,7 +328,7 @@ impl UI {
         }
     }
 
-    pub fn draw(&self, mouse_x: f32, mouse_y: f32) {
+    pub fn draw(&self, mouse_x: f32, mouse_y: f32, shift_state: bool, ctrl_state: bool) {
         clear_background(COLOR_BACKGROUND);
 
         let total_grid_width = screen_width() - OUTER_MARGIN_X * 2.0;
@@ -344,10 +389,7 @@ impl UI {
                         self.draw_number_text_in_rect(&format_rounded(value, 0), cell_rect, WHITE);
 
                         if mouse_x >= x && mouse_x <= x + cell_w && mouse_y >= y && mouse_y <= y + row_h {
-                            let left_hint_rect = Rect::new(x, y, cell_w * 0.5, row_h);
-                            let right_hint_rect = Rect::new(x + cell_w * 0.5, y, cell_w * 0.5, row_h);
-                            self.draw_label_text_in_rect("-", left_hint_rect, COLOR_CLICK_HINT_GLYPH);
-                            self.draw_label_text_in_rect("+", right_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                            self.draw_add_sub_hints(cell_rect, shift_state, ctrl_state);
                         }
                     }
                     2 => {
@@ -356,10 +398,7 @@ impl UI {
                         self.draw_number_text_in_rect(&format_rounded(value, 0), cell_rect, WHITE);
 
                         if mouse_x >= x && mouse_x <= x + cell_w && mouse_y >= y && mouse_y <= y + row_h {
-                            let left_hint_rect = Rect::new(x, y, cell_w * 0.5, row_h);
-                            let right_hint_rect = Rect::new(x + cell_w * 0.5, y, cell_w * 0.5, row_h);
-                            self.draw_label_text_in_rect("-", left_hint_rect, COLOR_CLICK_HINT_GLYPH);
-                            self.draw_label_text_in_rect("+", right_hint_rect, COLOR_CLICK_HINT_GLYPH);
+                            self.draw_add_sub_hints(cell_rect, shift_state, ctrl_state);
                         }
                     }
                     3 => {

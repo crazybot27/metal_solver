@@ -206,7 +206,7 @@ impl AvailableTransitions {
         self.transitions[transition as usize] = value;
     }
 
-    pub fn from_names(input: &str) -> Result<Self, String> {
+    fn from_names(input: &str) -> Result<Self, String> {
         if input == "All" {
             return Ok(AvailableTransitions { transitions: [true; Transition::COUNT] });
         } else if input == "None" {
@@ -223,7 +223,7 @@ impl AvailableTransitions {
         Ok(AvailableTransitions { transitions })
     }
 
-    pub fn from_bool_string(input: &str) -> Result<Self, String> {
+    fn from_bool_string(input: &str) -> Result<Self, String> {
         let mut transitions = [false; Transition::COUNT];
         for (i, part) in input.split_whitespace().enumerate() {
             if i >= Transition::COUNT {

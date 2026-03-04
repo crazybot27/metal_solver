@@ -24,12 +24,12 @@ async fn main() {
 
     loop {
         let (x, y) = mouse_position();
+        let shift = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftShift) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightShift);
+        let ctrl = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftControl) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightControl);
         if is_mouse_button_pressed(MouseButton::Left) {
-            let shift = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftShift) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightShift);
-            let ctrl = macroquad::input::is_key_down(macroquad::prelude::KeyCode::LeftControl) || macroquad::input::is_key_down(macroquad::prelude::KeyCode::RightControl);
             ui.handle_click(x, y, shift, ctrl);
         }
-        ui.draw(x, y);
+        ui.draw(x, y, shift, ctrl);
         next_frame().await;
     }
 }
