@@ -354,8 +354,8 @@ fn check_repeating(digits: &str, repeat_start: usize, repeat_length: usize) -> b
 }
 
 pub fn format_rounded(value: f64, max_digits: usize) -> String {
-    if value.round() == value || max_digits == 0 {
-        return format!("{:.0}", value);
+    if (value.round() - value).abs() < 10f64.powi(-(max_digits as i32)) || max_digits == 0 {
+        return format!("{:.0}", value.round().abs());
     }
     let value_string = value.to_string();
     let decimals = value_string.split('.').nth(1).unwrap_or("").chars().take(10).collect::<String>();
@@ -377,8 +377,8 @@ pub fn decimal_to_fraction(value: f64) -> String {
     let tolerance = 1e-6;
     let mut numerator = 1;
     let mut denominator = 1;
-    if (value.round() - value).abs() < 1e-7 {
-        return format!("{:.0}", value);
+    if (value.round() - value).abs() < tolerance {
+        return format_rounded(value, 0)
     }
 
     while (numerator as f64 / denominator as f64 - value).abs() > tolerance {

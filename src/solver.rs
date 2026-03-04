@@ -1,9 +1,15 @@
-use std::collections::HashSet;
+// use std::collections::HashSet;
 use good_lp::{
     constraint, default_solver, variable, variables, Expression, Solution, SolverModel, Variable,
 };
 use crate::model::*;
 
+/* 
+// It's painful to leave this out because of how proud I am of it but the system seems to flow better
+// If you just make all the numbers 0 when it's impossible to make a solution.
+// This would check which metals can be made with a given set of transitions and initial metals, 
+// and if the target state contains any metals that aren't in the reachable set, it would skip trying to solve
+// and just tell you it was unsolvable.
 impl SolveState {
     fn theoretically_reachable_metals(&self, transitions: &AvailableTransitions) -> HashSet<Metal> {
         let mut available_metals: HashSet<Metal> = self
@@ -14,12 +20,14 @@ impl SolveState {
             .collect();
 
         //example of an additional transition (antiquation)
+        
         /*
         if transitions.get(Transition::Antiquation) {
             available_metals.insert(Metal::Lead);
             available_metals.insert(Metal::Quicksilver);
         }
         */
+        
 
         // add all metals reachable by deposition from the highest available metal. 
         // If the number of available metals was higher the way we do this would be inaccurate (ie a metal of tier 8 would split into 4,4 which cannot reach 3)
@@ -98,15 +106,16 @@ impl SolveState {
         Self::target_within_reachable_metals(&reachable_metals, target)
     }
 }
+*/
 
 pub fn solve_lp(
     initial: &SolveState,
     target: &SolveState,
     transitions: &AvailableTransitions
 ) -> Result<OptimalSolution, String> {
-    if !initial.can_theoretically_reach(target, transitions) {
-        return Err("Target is Unreachable".to_string());
-    }
+    // if !initial.can_theoretically_reach(target, transitions) {
+    //     return Err("Target is Unreachable".to_string());
+    // }
     let mut problem = variables!();
     // here's where we specify that no transition can be used a negative number of times, since that wouldn't make sense
     let vars: [Variable; Metal::COUNT * Transition::COUNT] =
@@ -171,8 +180,9 @@ pub fn solve_lp(
         - d[6],
     ];
 
-    /*
+    
     // Example for Antiquation. The equations are set up so that anything you use it on (including quicksilver) turns into lead, and lead turns into quicksilver
+    /*
     let antiquation_terms: [Expression; Metal::COUNT] = [
         - a[0] + a[1], // for every time antiquation is used on quicksilver, you lose one quicksilver. For every time antiquiation is used on lead, you gain one quicksilver
         - a[1] + a[0] + a[2] + a[3] + a[4] + a[5] + a[6],
@@ -182,8 +192,9 @@ pub fn solve_lp(
         - a[5],
         - a[6],
     ];
-    // I hope I explained this well enough
     */
+    // I hope I explained this well enough
+    
 
     
     let initial_metals = initial.metals;
@@ -193,8 +204,9 @@ pub fn solve_lp(
             + projection_terms[idx].clone() 
             + rejection_terms[idx].clone() 
             + purification_terms[idx].clone() 
-            + deposition_terms[idx].clone();
-            // + antiquation_terms[idx].clone(); // just add the new terms in the same way as the others
+            + deposition_terms[idx].clone()
+            // + antiquation_terms[idx].clone() // just add the new terms in the same way as the others
+        ;
         output_expressions.push(output);
     }
 

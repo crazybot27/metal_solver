@@ -226,12 +226,15 @@ impl UI {
         self.textures = textures.iter().filter_map(|t| t.clone()).collect();
     }
 
-    fn transition_value(&self, row_idx: usize, metal: Metal) -> String {
+    fn transition_value(&self, row_idx: usize, col_idx: usize) -> String {
+        let transition = Transition::from(row_idx - 4);
+        let metal = Metal::from(col_idx);
+        if !transition.is_valid_target(metal) {
+            return "".to_string();
+        }
         let Ok(solution) = &self.solution else {
             return "/".to_string();
         };
-
-        let transition = Transition::from(row_idx - 4);
         let value = solution.get_transition_value(transition, metal);
         if let Some(value) = value {
             decimal_to_fraction(value)
@@ -368,7 +371,7 @@ impl UI {
                         self.draw_number_text_in_rect(&text, cell_rect, COLOR_OUTPUT_TEXT);
                     }
                     4..ROW_COUNT => {
-                        let text = self.transition_value(row_idx, Metal::from(metal_idx));
+                        let text = self.transition_value(row_idx, metal_idx);
                         self.draw_number_text_in_rect(&text, cell_rect, COLOR_TRANSITION_TEXT);
                     }
                     _ => {}

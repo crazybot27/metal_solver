@@ -14,8 +14,8 @@ use ui::*;
 async fn main() {
     display_loading_screen().await;
     let initial_state = SolveState::from_input("1 1 0 0 0 0 0").expect("Invalid hardcoded initial state");
-    let target_state = SolveState::from_input("0 0 1 0 0 0 0").expect("Invalid hardcoded target state");
-    let available_transitions = AvailableTransitions::from_input("1 0 0 0").expect("Invalid hardcoded available transitions");
+    let target_state = SolveState::from_input("0 2 0 1 0 0 0").expect("Invalid hardcoded target state");
+    let available_transitions = AvailableTransitions::from_input("1 0 0 1").expect("Invalid hardcoded available transitions");
 
     let mut ui = UI::new(initial_state, target_state, available_transitions);
 
