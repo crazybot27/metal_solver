@@ -346,7 +346,8 @@ impl UI {
             COLOR_GRID_BG,
         );
 
-        for (row_idx, row_label) in ROW_LABELS.iter().enumerate() {
+        for row_idx in (0..rows).rev() {
+            let row_label = ROW_LABELS[row_idx];
             let y = OUTER_MARGIN_TOP + row_idx as f32 * row_h;
             let label_rect = Rect::new(OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h);
 
@@ -367,7 +368,13 @@ impl UI {
             for metal_idx in 0..Metal::COUNT {
                 let x = OUTER_MARGIN_X + LABEL_COLUMN_WIDTH + metal_idx as f32 * cell_w;
                 let cell_rect = Rect::new(x, y, cell_w, row_h);
-                draw_rectangle_lines(x, y, cell_w, row_h, GRID_CELL_BORDER_THICKNESS, DARKGRAY);
+                let border_thickness = if row_idx < 4 {
+                    GRID_LABEL_BORDER_THICKNESS
+                } else {
+                    GRID_CELL_BORDER_THICKNESS
+                };
+                let border_color = if row_idx < 4 { GRAY } else { DARKGRAY };
+                draw_rectangle_lines(x, y, cell_w, row_h, border_thickness, border_color);
     
                 match row_idx {
                     0 => {
@@ -427,6 +434,15 @@ impl UI {
                 );
             }
         }
+
+        draw_rectangle_lines(
+            OUTER_MARGIN_X,
+            OUTER_MARGIN_TOP,
+            total_grid_width,
+            total_grid_height,
+            GRID_LABEL_BORDER_THICKNESS,
+            GRAY,
+        );
 
         let ratio_box_y = OUTER_MARGIN_TOP + total_grid_height + OUTPUT_RATIO_GAP_Y;
         draw_rectangle(
