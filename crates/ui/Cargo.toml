@@ -1,0 +1,8 @@
+[package]
+name = "metal_solver_ui"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+metal_solver_core = { path = "../core" }
+macroquad = "0.4.14"

@@ -1,11 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod model;
 use macroquad::prelude::{is_mouse_button_pressed, mouse_position, MouseButton};
 use macroquad::window::next_frame;
-use model::*;
-
-mod solver;
+use metal_solver_core::model::{AvailableTransitions, SolveState};
 
 mod ui;
 use ui::*;

@@ -1,0 +1,11 @@
+[package]
+name = "metal_solver_wasm"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+metal_solver_core = { path = "../core" }
+wasm-bindgen = "0.2"

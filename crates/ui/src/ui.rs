@@ -3,25 +3,25 @@ use macroquad::prelude::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::model::*;
-use crate::solver::solve_lp;
+use metal_solver_core::model::*;
+use metal_solver_core::solver::solve_lp;
 
 const IMAGE_BYTES: [&[u8]; Metal::COUNT] = [
-    include_bytes!("assets/quicksilver_symbol.png"),
-    include_bytes!("assets/lead_symbol.png"),
-    include_bytes!("assets/tin_symbol.png"),
-    include_bytes!("assets/iron_symbol.png"),
-    include_bytes!("assets/copper_symbol.png"),
-    include_bytes!("assets/silver_symbol.png"),
-    include_bytes!("assets/gold_symbol.png"),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/quicksilver_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/lead_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/tin_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/iron_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/copper_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/silver_symbol.png")),
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/gold_symbol.png")),
 ];
 
-const LETTER_FONT_BYTES: &[u8] = include_bytes!("assets/old_english.ttf");
-const NUMBER_FONT_BYTES: &[u8] = include_bytes!("assets/french_script.ttf");
+const LETTER_FONT_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/old_english.ttf"));
+const NUMBER_FONT_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/french_script.ttf"));
 
-const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
-const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium.tif");
-const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small.tif");
+const ICON_BIG: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/icon_big.tif"));
+const ICON_MEDIUM: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/icon_medium.tif"));
+const ICON_SMALL: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/assets/icon_small.tif"));
 
 // const METAL_LABELS: [&str; Metal::COUNT] = ["QS", "Pb", "Sn", "Fe", "Cu", "Ag", "Au"];
 
