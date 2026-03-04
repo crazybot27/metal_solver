@@ -1,4 +1,5 @@
 # Metal Solver
+![Screenshot](screenshot.png)
 ## What is this?
 It solves rate problems with metals in Opus Magnum. It supports all 4 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. This means you'll always be taking out atoms as fast as possible, and making them into products as efficiently as possible. This solver tells you the most efficient way to do it.
 ## How do I use it?
