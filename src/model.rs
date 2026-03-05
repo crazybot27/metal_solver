@@ -379,27 +379,43 @@ pub fn format_rounded(value: f64, max_digits: usize) -> String {
     format!("{:.1$}", value, decimals_to_show)
 }
 
+// adapted from https://ics.uci.edu/~eppstein/numth/frap.c
 pub fn decimal_to_fraction(value: f64) -> String {
-    let tolerance = 1e-6;
-    let mut numerator = 1;
-    let mut denominator = 1;
+
     if (value.round() - value).abs() < tolerance {
         return format_rounded(value, 0)
     }
 
-    while (numerator as f64 / denominator as f64 - value).abs() > tolerance {
-        if numerator > 1000 || denominator > 1000 {
-            return format_rounded(value, 5);
+    let mut x = value;
+    let maxden: i64 = 100000;
+
+    let mut a: i64 = 0;
+    let mut b: i64 = 1;
+    let mut c: i64 = 1;
+    let mut d: i64 = 0;
+    let mut t: i64;
+    let mut ai: i64;
+
+    while (c * (x as i64) + d) <= maxden {
+        ai = x as i64;
+        t = a * ai + b;
+        b = a;
+        a = t;
+        t = c * ai + d;
+        d = c;
+        c = t;
+        if x == ai as f64 {
+            break;
         }
-        if (numerator as f64) / (denominator as f64) < value {
-            numerator += 1;
-        } else {
-            denominator += 1;
+        x = 1.0/(x - (ai as f64));
+        if x > 1e9 as f64 {
+            break;
         }
     }
-    if denominator == 1 {
-        format!("{}", numerator)
+
+    if a == 1 {
+        format!("{}", c)
     } else {
-        format!("{}/{}", numerator, denominator)
+        format!("{}/{}", c, a)
     }
 }
