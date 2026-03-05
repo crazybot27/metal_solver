@@ -382,7 +382,7 @@ pub fn format_rounded(value: f64, max_digits: usize) -> String {
 // adapted from https://ics.uci.edu/~eppstein/numth/frap.c
 pub fn decimal_to_fraction(value: f64) -> String {
 
-    if (value.round() - value).abs() < tolerance {
+    if (value.round() - value).abs() < 1e-9 {
         return format_rounded(value, 0)
     }
 
