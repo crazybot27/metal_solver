@@ -382,13 +382,10 @@ pub fn format_rounded(value: f64, max_digits: usize) -> String {
 // adapted from https://ics.uci.edu/~eppstein/numth/frap.c
 pub fn decimal_to_fraction(value: f64) -> String {
 
-    if (value.round() - value).abs() < 1e-9 {
-        return format_rounded(value, 0)
-    }
+    let tolerance = 1e-8;
+    let maxden: i64 = 10000;
 
     let mut x = value;
-    let maxden: i64 = 100000;
-
     let mut a: i64 = 0;
     let mut b: i64 = 1;
     let mut c: i64 = 1;
@@ -404,13 +401,10 @@ pub fn decimal_to_fraction(value: f64) -> String {
         t = c * ai + d;
         d = c;
         c = t;
-        if x == ai as f64 {
+        if (x - (ai as f64)).abs() < tolerance {
             break;
         }
         x = 1.0/(x - (ai as f64));
-        if x > 1e9 as f64 {
-            break;
-        }
     }
 
     if a == 1 {
