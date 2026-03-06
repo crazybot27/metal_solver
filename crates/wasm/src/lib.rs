@@ -3,14 +3,24 @@ use metal_solver_core::solver::solve_lp;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn solve_ratio(initial: &str, target: &str, transitions: &str) -> Result<String, String> {
-    let initial_state = SolveState::from_input(initial).map_err(|e| format!("Invalid initial state: {e}"))?;
-    let target_state = SolveState::from_input(target).map_err(|e| format!("Invalid target state: {e}"))?;
-    let available_transitions = AvailableTransitions::from_input(transitions).map_err(|e| format!("Invalid transitions: {e}"))?;
+pub fn solve_ratio(initial: &str, target: &str, transitions: &str) -> String {
+    let initial_state = match SolveState::from_input(initial) {
+        Ok(state) => state,
+        Err(e) => return format!(r#"{{"error": "Error with initial state: {}"}}"#, e),
+    };
+    let target_state = match SolveState::from_input(target) {
+        Ok(state) => state,
+        Err(e) => return format!(r#"{{"error": "Error with target state: {}"}}"#, e),
+    };
+    let available_transitions = match AvailableTransitions::from_input(transitions) {
+        Ok(trans) => trans,
+        Err(e) => return format!(r#"{{"error": "Error with available transitions: {}"}}"#, e),
+    };
 
-    solve_lp(&initial_state, &target_state, &available_transitions)
-        .map(|solution| solution.to_json_string(false, true))
-        .map_err(|e| format!("Solve failed: {e}"))
+    match solve_lp(&initial_state, &target_state, &available_transitions) {
+        Ok(solution) => solution.to_json_string(false, true),
+        Err(e) => format!(r#"{{"error": "Error with solving: {}"}}"#, e),
+    }
 }
 #[wasm_bindgen]
 pub fn get_transition_names() -> String {

@@ -5,38 +5,169 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metal Ratio Solver</title>
     <style>
+        @font-face {
+            font-family: 'English Font';
+            src: url('src/assets/old_english.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'French Script';
+            src: url('src/assets/french_script.ttf') format('truetype');
+        }
+    </style>
+    <style>
+        :root {
+            --color-background: #0d161f;
+
+            --color-grid-bg: #1f2534;
+            --color-clickable-bg: #587496;
+            --color-disabled-clickable: #2a3544;
+            --color-disabled-row: #181c27;
+            --color-output-text: #c7e8eb;
+            --color-transition-text: #f2e8cc;
+
+            --color-output-ratio-bg: #212a30;
+            --color-output-ratio-border: #738acc;
+
+            --font-size: 40px;
+            --letters-font: 'English Font', serif;
+            --numbers-font: 'French Script', cursive;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            padding: 50px;
-            background-color: #000;
+            font-family: Arial, Helvetica, sans-serif;
+            padding: 50px 30px;
+            background-color: var(--color-background);
             color: #fff;
         }
         table {
             width: 100%;
+            margin: auto;
             border-collapse: collapse;
-            background-color: #222;
+            background-color: var(--color-grid-bg);
+            font-family: var(--numbers-font);
+            font-size: var(--font-size);
+            table-layout: fixed;
         }
         th, td {
-            padding: 12px;
-            text-align: left;
-            border: 1px solid #fff;
+            border: 2px solid grey;
+            text-align: center;
+        }
+        th:first-child, td.row-label {
+            width: 22.222%;
+        }
+        th:not(:first-child), td:not(.row-label) {
+            width: 11.111%;
         }
         th {
-            background-color: #333;
-            color: white;
+            font-family: var(--letters-font);
+            font-size: calc(var(--font-size) * 0.7);
         }
-        tr:hover {
-            background-color: #333;
+        .metal-symbol {
+            width: 60px;
+            height: 60px;
+            margin: -2px auto -10px auto;
         }
         .row-label {
-            font-weight: bold;
-            background-color: #333;
+            --font-multiplier: 0.6;
+            font-family: var(--letters-font);
+            font-size: calc(var(--font-size) * var(--font-multiplier));
+            color: #fff;
+            background-color: var(--color-grid-bg);
+            padding: 0px 4px;
+            user-select: none;
+        }
+        .transformation-row .row-label {
+            background-color: var(--color-clickable-bg);
+        }
+        .transformation-row:hover .row-label {
+            filter: brightness(85%);
+        }
+        .transformation-row.disabled-row .row-label {
+            background-color: var(--color-disabled-clickable);
+        }
+        td:not(.row-label) {
+            font-size: var(--font-size);
+        }
+
+        .input-row {
+            background-color: var(--color-clickable-bg);
+        }
+        .input-row td:not(.row-label):hover {
+            background-color: #0002;
+        }
+        .output-row {
+            color: var(--color-output-text);
+        }
+        .transformation-row {
+            color: var(--color-transition-text);
+        }
+        .disabled-row {
+            background-color: var(--color-disabled-row) !important;
+            color: #666 !important;
+        }
+
+        input {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            box-sizing: border-box;
+            font-size: var(--font-size);
+            background-color: transparent;
+            text-align: center;
+            color: #fff;
+            border: none;
+            font-family: var(--numbers-font);
+        }
+
+        #ratio-box {
+            background-color: var(--color-output-ratio-bg);
+            border: 2px solid var(--color-output-ratio-border);
+            font-family: var(--letters-font);
+            font-size: calc(var(--font-size) * 1.0);
+            padding: 20px;
+            text-align: center;
+            width: 100%;
+            margin: 30px auto;
+            box-sizing: border-box;
+        }
+        #ratio-number {
+            font-family: var(--numbers-font);
+            font-size: calc(var(--font-size) * 1.5);
+            margin-left: 10px;
         }
     </style>
 </head>
 <body>
     <table id="the-table">
     </table>
+
+    <div id="ratio-box">Best Ratio:<span id="ratio-number">0</span></div>
+
+    <button onclick="toggle_font()">Default Fonts</button>
+    <button onclick="toggle_spoilers()">Toggle Spoilers</button>
+
+    <script>
+        function toggle_font() {
+            const root = document.documentElement;
+            if (root.style.getPropertyValue('--numbers-font').includes('French Script')) {
+                root.style.setProperty('--letters-font', 'Arial, Helvetica, sans-serif');
+                root.style.setProperty('--numbers-font', 'Arial, Helvetica, sans-serif');
+            } else {
+                root.style.setProperty('--letters-font', 'English Font, serif');
+                root.style.setProperty('--numbers-font', 'French Script, cursive');
+            }
+        }
+
+        function toggle_spoilers() {
+            const table = document.getElementById('the-table');
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                if (index >= 4) {
+                    row.style.display = row.style.display === 'none' ? '' : 'none';
+                }
+            });
+        }
+    </script>
 
     <script type="module">
         import init, { solve_ratio, get_metal_names, get_transition_names } from './metal_solver_wasm.js';
@@ -54,9 +185,8 @@
             const METAL_NAMES = JSON.parse(get_metal_names());
             const TRANSITION_NAMES = JSON.parse(get_transition_names());
             generateTable(METAL_NAMES, TRANSITION_NAMES);
-            let inputs = [0 * METAL_NAMES.length];
-            let targets = [0 * METAL_NAMES.length];
-            let transitions = ["false" * TRANSITION_NAMES.length];
+            populate_initial_values();
+            refreshTableWithValues();
         }
 
         function generateTable(metalNames, transitionNames) {
@@ -68,63 +198,144 @@
             headerRow.appendChild(cornerCell);
             metalNames.forEach(metal => {
                 const th = document.createElement('th');
-                th.textContent = metal;
+                const image = document.createElement('img');
+                image.src = `src/assets/${metal.toLowerCase()}_symbol.png`;
+                image.classList.add('metal-symbol');
+                th.appendChild(image);
                 headerRow.appendChild(th);
             });
             table.appendChild(headerRow);
 
             const rowLabels = ['Input', 'Target', 'Output', ...transitionNames];
-            rowLabels.forEach(label => {
+            rowLabels.forEach((label, rowIndex) => {
                 const row = document.createElement('tr');
+                if (rowIndex < 2) { // Input, Target
+                    row.className = 'input-row';
+                } else if (rowIndex === 2) {
+                    row.className = 'output-row';
+                } else if (rowIndex >= 3) {
+                    row.className = 'transformation-row';
+                    row.onclick = () => {
+                        row_clicked(rowIndex);
+                    };
+                }
                 const labelCell = document.createElement('td');
                 labelCell.textContent = label;
                 labelCell.className = 'row-label';
                 row.appendChild(labelCell);
-                metalNames.forEach(metal => {
+                metalNames.forEach((metal, cellIndex) => {
                     const cell = document.createElement('td');
-                    if (label === 'Input' || label === 'Target') {
+                    if (rowIndex < 2) { // Input, Target
                         const input_cell = document.createElement('input');
-                        input_cell.type = 'number';
-                        input_cell.step = '1';
+                        input_cell.inputMode = 'numeric';
                         input_cell.value = '0';
+                        input_cell.oninput = () => {
+                            refreshTableWithValues();
+                        }
                         cell.appendChild(input_cell);
                     } else {
                         cell.textContent = '0';
                     }
                     cell.dataset.metal = metal;
                     cell.dataset.field = label;
+                    cell.dataset.row = rowIndex;
+                    cell.dataset.col = cellIndex;
                     row.appendChild(cell);
                 });
                 table.appendChild(row);
             });
         }
 
+        function populate_initial_values() {
+            // 2 2 0 0 0 0 0
+            // 0 2 0 1 0 0 0
+            // true false false true
+            let table = document.getElementById('the-table');
+            let rows = table.querySelectorAll('tr');
+            rows[1].querySelectorAll('input').forEach((input, index) => {
+                input.value = index < 2 ? '2' : '0';
+            });
+            rows[2].querySelectorAll('input').forEach((input, index) => {
+                input.value = index === 1 ? '2' : (index === 3 ? '1' : '0');
+            });
+            rows[5].classList.add('disabled-row'); // Rejection off
+            rows[6].classList.add('disabled-row'); // Purification off
+        }
 
         function refreshTable(inputs, targets, transitions) {
             let solve = JSON.parse(solve_ratio(inputs, targets, transitions));
-            let ratio = solve.ratio;
-            let outputs = solve.outputs;
-            let transitions = solve.transitions;
+            if (solve.error) {
+                const ratioBox = document.getElementById('ratio-box');
+                document.querySelectorAll('.output-row td:not(.row-label), .transformation-row td:not(.row-label)').forEach(cell => {
+                    cell.textContent = '/';
+                });
+                ratioBox.textContent = solve.error;
+                return;
+            }
             const table = document.getElementById('the-table');
             const rows = table.querySelectorAll('tr');
             rows.forEach((row, rowIndex) => {
-                if (rowIndex < 3) return; // Skip header and input/target rows
+                if (rowIndex < 3) return;
                 const cells = row.querySelectorAll('td');
                 cells.forEach((cell, cellIndex) => {
-                    if (cellIndex === 0) return; // Skip label
+                    if (cellIndex === 0) return;
                     const metal = cell.dataset.metal;
                     const field = cell.dataset.field;
                     if (field === 'Output') {
-                        cell.textContent = outputs[metal];
+                        cell.textContent = solve.outputs[cellIndex - 1];
                     } else { 
-                        cell.textContent = transitions[metal];
+                        cell.textContent = solve.transitions[rowIndex - 4][cellIndex - 1];
                     }
                 });
             });
+            const ratioBox = document.getElementById('ratio-box');
+            ratioBox.innerHTML = `Best Ratio:<span id="ratio-number">${solve.ratio}</span>`;
         }
-        // Run the initialization
+
+        function refreshTableWithValues() {
+            const table = document.getElementById('the-table');
+            const rows = table.querySelectorAll('tr');
+            let inputs = [];
+            let targets = [];
+            let transitions = [];
+            rows.forEach((row, rowIndex) => {
+                const cells = row.querySelectorAll('td');
+                cells.forEach((cell, cellIndex) => {
+                    if (cellIndex === 0) return;
+                    const field = cell.dataset.field;
+                    if (field === 'Input') {
+                        inputs.push(cell.querySelector('input').value);
+                    } else if (field === 'Target') {
+                        targets.push(cell.querySelector('input').value);
+                    }
+                });
+                if (rowIndex >= 4) { // Transition rows
+                    if (row.classList.contains('disabled-row')) {
+                        transitions.push("false");
+                    } else {
+                        transitions.push("true");
+                    }
+                }
+            });
+            inputs = inputs.map(v => isNaN(v) || v === '' ? '0' : v);
+            targets = targets.map(v => isNaN(v) || v === '' ? '0' : v);
+            refreshTable(inputs.join(" "), targets.join(" "), transitions.join(" "));
+        }
+
+        function row_clicked(rowIndex) {
+            const table = document.getElementById('the-table');
+            const rows = table.querySelectorAll('tr');
+            const row = rows[rowIndex+1];
+            if (row.classList.contains('disabled-row')) {
+                row.classList.remove('disabled-row');
+            } else {
+                row.classList.add('disabled-row');
+            }
+            refreshTableWithValues();
+        }
         run().catch((err) => {
-            statusEl.textContent = "Failed to load WebAssembly";
+            let ratioBox = document.getElementById('ratio-box');
+            ratioBox.textContent = "Error initializing WebAssembly: " + err;
             console.error(err);
         });
     </script>

@@ -406,7 +406,7 @@ impl OptimalSolution {
         let mut output = String::from("");
 
         let ratio = if pretty_values {
-            format!("\"{} ({})\"", format_rounded(self.ratio, 4), self.ratio)
+            format!("\"{} ({})\"", decimal_to_fraction(self.ratio), format_rounded(self.ratio, 4))
         } else {
             self.ratio.to_string()
         };
