@@ -134,7 +134,6 @@ pub fn solve_lp(
     let pu = transition_vars(Transition::Purification);
     let d = transition_vars(Transition::Division);
     let pf = transition_vars(Transition::Proliferation);
-    let d = transition_vars(Transition::Division);
     // let a = transition_vars(Transition::Antiquation); //antiquation
 
     // p[1] is the number of times projection is used on lead (ID 1), p[2] on tin (ID 2), etc. Same for the other transitions.

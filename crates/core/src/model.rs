@@ -142,7 +142,7 @@ pub enum Transition {
     Projection = 0, // Uses one QS to raise a metal to the next level
     Rejection = 1, // Lowers a metal and yields a QS
     Purification = 2, // Turns two metals into one of the next level
-    Deposition = 3, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
+    Division = 3, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
     Proliferation = 4, //Turns a QS into another metal
     // Antiquation = 4, // Example extra transition
 }
@@ -160,7 +160,7 @@ impl Transition {
             0 => Transition::Projection,
             1 => Transition::Rejection,
             2 => Transition::Purification,
-            3 => Transition::Deposition,
+            3 => Transition::Division,
             4 => Transition::Proliferation,
             // 4 => Transition::Antiquation,
             _ => panic!("Invalid transition index"),
@@ -169,7 +169,7 @@ impl Transition {
 
     pub fn from_name(name: &str) -> Option<Self> {
         let name = name.to_ascii_lowercase();
-        if name == "dep" || name == "deposition" {
+        if name == "dep" || name == "division" {
             return Some(Transition::Division); // special case for legacy name of division
          }
         Self::all().iter().find(|t| t.name().to_ascii_lowercase() == name || t.short_name().to_ascii_lowercase() == name).copied()
@@ -180,7 +180,7 @@ impl Transition {
             Transition::Projection,
             Transition::Rejection,
             Transition::Purification,
-            Transition::Deposition,
+            Transition::Division,
             Transition::Proliferation,
             // Transition::Antiquation,
         ]
@@ -191,7 +191,7 @@ impl Transition {
             Transition::Projection => "Projection",
             Transition::Rejection => "Rejection",
             Transition::Purification => "Purification",
-            Transition::Deposition => "Deposition",
+            Transition::Division => "Division",
             Transition::Proliferation => "Proliferation",
             // Transition::Antiquation => "Antiquation",
         }
@@ -202,7 +202,7 @@ impl Transition {
             Transition::Projection => "Prj",
             Transition::Rejection => "Rej",
             Transition::Purification => "Pur",
-            Transition::Deposition => "Dep",
+            Transition::Division => "Div",
             Transition::Proliferation => "Plf",
             // Transition::Antiquation => "Ant",
         }
@@ -214,7 +214,7 @@ impl Transition {
             Transition::Projection => [false, true, true, true, true, true, false], //You can project anything other than QS and Gold
             Transition::Rejection => [false, false, true, true, true, true, true], //You can reject anything tin or above other than QS
             Transition::Purification => [false, true, true, true, true, true, false], //You can purify anything tin or above other than QS and Gold
-            Transition::Deposition => [false, false, true, true, true, true, true], //You can deposit anything tin or above other than QS
+            Transition::Division => [false, false, true, true, true, true, true], //You can divide anything tin or above other than QS
             Transition::Proliferation => [false, true, true, true, true, true, true], //You can proliferate QS into anything other than QS
             // Transition::Antiquation => [true, true, true, true, true, true, true], //Example transition that can be applied to any metal
         }
@@ -240,12 +240,12 @@ impl AvailableTransitions {
 
     pub fn from_input(input: &str) -> Result<Self, String> {
         // supported input formats:
-        // "1011" (values in order)
-        // "t y true yes" (any combination of boolean words) 
-        // "truefalse,nono" (no spaces needed, other spacers optional)
+        // "10110" (values in order)
+        // "t y true yes y" (any combination of boolean words) 
+        // "truefalse,nonoyes" (no spaces needed, other spacers optional)
         // "Divisionprojection" (named transitions in any order with or without spaces, also accepts short names like "Pro, Div")
         // "all" or "none" (cannot be combined with anything else, sets all transitions on or off respectively)
-        // "0001 proj rej" (each name adds a transition. If you include any values you must either include all four, or the exact number needed in addition to the names)
+        // "0001 prj rej prf" (each name adds a transition. If you include any values you must either include all four, or the exact number needed in addition to the names)
         // "10 rej pur" means projection is on from the values, rejection and purification are on because of the names, and division is off
         let mut sanitized = input.to_ascii_lowercase().chars()
         .filter(|c| c.is_ascii_alphanumeric()).collect::<String>();
