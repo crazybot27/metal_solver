@@ -30,3 +30,5 @@ Linear programming turns out to be pretty efficient for this kind of problem, an
 No, not yet, but I might make that possible eventually. Rewriting the UI would be pretty easy but I have no idea how to use webassembly and I have no interest in rewriting this for javascript.
 ## Can you add this feature?
 Depends on how fun I think it'll be to work on. Message me on discord if you have an idea and I'll see what I can do.
+# Credits/License:
+All code written by me (Nodrance) except for proliferation code which was written by 🌷 and the decimal to fraction function which is credited inline and was integrated into the project by 🌷. Images are from Opus Magnum by Zachtronics, used without permission. Icon was made by me. Fonts are from windows. License is CC-BY-SA for everything written by me, which means "do whatever you want as long as you give credit, and if you make something using this then it also has to be CC-BY-SA".
